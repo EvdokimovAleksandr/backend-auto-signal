@@ -1,15 +1,157 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// schema.prisma
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id           BigInt   @id @map("user_id") @default(autoincrement())
+  username     String?
+  first_name   String?
+  last_name    String?
+  created_at   DateTime @default(now())
+  
+  // Связи
+  premium      PremiumUsers?
+  file_access  FileAccessStats[]
+  admin        AdminUsers?
+  
+  @@map("users")
+}
+
+model Brand {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  created_at DateTime @default(now())
+  
+  // Связи
+  models    Model[]
+  
+  @@map("brands")
+}
+
+model Model {
+  id        Int      @id @default(autoincrement())
+  name      String
+  brand_id  Int
+  created_at DateTime @default(now())
+  
+  // Связи
+  brand     Brand    @relation(fields: [brand_id], references: [id])
+  years     Year[]
+  
+  @@map("models")
+  @@unique([brand_id, name])
+}
+
+model Year {
+  id        Int      @id @default(autoincrement())
+  value     String
+  model_id  Int
+  created_at DateTime @default(now())
+  
+  // Связи
+  model     Model    @relation(fields: [model_id], references: [id])
+  files     File[]
+  
+  @@map("years")
+  @@unique([model_id, value])
+}
+
+model File {
+  id              Int      @id @default(autoincrement())
+  name            String
+  path            String
+  is_premium      Boolean  @default(false)
+  year_id         Int
+  created_at      DateTime @default(now())
+  
+  // Связи
+  year            Year     @relation(fields: [year_id], references: [id])
+  access_stats    FileAccessStats[]
+  descriptions    Description[]
+  
+  @@map("files")
+}
+
+model Description {
+  id              Int      @id @default(autoincrement())
+  content         String
+  file_id         Int
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  
+  // Связи
+  file            File     @relation(fields: [file_id], references: [id])
+  
+  @@map("descriptions")
+}
+
+// Остальные модели из вашего миграционного скрипта
+model SubscriptionPrice {
+  id             Int      @id @default(autoincrement())
+  period_months  Int      @unique
+  price_kopecks  Int
+  created_at     DateTime @default(now())
+
+  @@map("subscription_prices")
+}
+
+model FileAccessStats {
+  id          Int      @id @default(autoincrement())
+  user_id     BigInt
+  brand       String
+  model       String
+  year        String
+  file_id     Int?
+  accessed_at DateTime @default(now())
+  
+  // Связи
+  user        User?    @relation(fields: [user_id], references: [id])
+  file        File?    @relation(fields: [file_id], references: [id], onDelete: Cascade)
+  
+  @@map("file_access_stats")
+  @@index([brand, model], map: "idx_file_access_stats_brand_model")
+  @@index([accessed_at], map: "idx_file_access_stats_accessed_at")
+}
+
+model BotSettings {
+  id            Int      @id @default(autoincrement())
+  setting_key   String   @unique
+  setting_value String
+  updated_at    DateTime @default(now())
+
+  @@map("bot_settings")
+}
+
+model PremiumUsers {
+  id            Int      @id @default(autoincrement())
+  user_id       BigInt   @unique
+  sub_end       DateTime
+  period_months Int      @default(1)
+  
+  // Связи
+  user          User     @relation(fields: [user_id], references: [id])
+  
+  @@map("premium_users")
+  @@index([sub_end], map: "idx_premium_users_sub_end")
+}
+
+model AdminUsers {
+  id            Int      @id @default(autoincrement())
+  user_id       BigInt   @unique
+  username      String?
+  added_by      BigInt?
+  added_at      DateTime @default(now())
+  is_super_admin Boolean @default(false)
+
+  // Связи
+  user          User     @relation(fields: [user_id], references: [id])
+  
+  @@map("admin_users")
 }
