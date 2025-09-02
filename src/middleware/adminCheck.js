@@ -1,5 +1,5 @@
 // middleware/adminCheck.js
-const prisma = require("../config/database");
+const prisma = require("../utils/database");
 
 const checkAdminStatus = async (userId) => {
   const admin = await prisma.admin_users.findUnique({

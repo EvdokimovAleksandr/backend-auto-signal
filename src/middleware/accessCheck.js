@@ -1,4 +1,4 @@
-const prisma = require("../config/database");
+const prisma = require("../utils/database");
 
 // Проверка, имеет ли пользователь доступ к премиум-контенту
 const checkPremiumAccess = async (userId) => {

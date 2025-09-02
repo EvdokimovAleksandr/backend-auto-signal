@@ -1,8 +1,6 @@
-const prisma = require("../config/database");
+const prisma = require("../utils/database");
 
 const filesController = {
-  // ... существующие методы ...
-
   // Получить марки для управления описаниями
   getBrandsForDescriptions: async (req, res) => {
     try {

@@ -1,4 +1,4 @@
-const prisma = require("../config/database");
+const prisma = require("../utils/database");
 
 const subscriptionController = {
   // ... существующие методы ...
