@@ -3,10 +3,9 @@ const router = express.Router();
 const carsController = require("../controllers/carsController");
 const { requireAdmin } = require("../middleware/adminCheck");
 
-router.get("/brands", carsController.getBrands);
 router.post("/brands", carsController.addBrand);
 router.delete("/brands/:id", carsController.deleteBrand);
-router.get("/models", carsController.getModelsByBrand);
+
 router.post("/models", carsController.addModel);
 // Маршруты для марок автомобилей
 router.get("/brands", carsController.getBrands);

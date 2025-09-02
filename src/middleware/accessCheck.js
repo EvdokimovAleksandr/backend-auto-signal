@@ -90,4 +90,8 @@ const requireFileOwnershipOrAdmin = async (req, res, next) => {
   }
 };
 
-module.exports = { checkPremiumAccess, requirePremiumOrAdmin };
+module.exports = {
+  checkPremiumAccess,
+  requirePremiumOrAdmin,
+  requireFileOwnershipOrAdmin,
+};
