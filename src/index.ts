@@ -1,24 +1,30 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-
-dotenv.config();
+const express = require("express");
+const cors = require("cors");
+require("dotenv").config();
 
 const app = express();
-const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // для парсинга JSON-тела запросов
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Простейший route для проверки работы сервера
-app.get("/api/health", (req, res) => {
-  res.json({ message: "Server is running!" });
-});
+// Routes
+// app.use("/api/auth", require("./routes/auth"));
+app.use("/api/users", require("./routes/users"));
+app.use("/api/cars", require("./routes/cars"));
+app.use("/api/files", require("./routes/files"));
+app.use("/api/info", require("./routes/info"));
+app.use("/api/subscription", require("./routes/subscription"));
+app.use("/api/admin", require("./routes/admin"));
+app.use("/api/stats", require("./routes/stats"));
 
-// Здесь позже будут подключаться маршруты вашего API
-// app.use('/api/users', userRoutes);
+// Health check
+// app.get("/health", (req, res) => {
+//   res.json({ status: "OK", message: "Server is running" });
+// });
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+const PORT = process.env.PORT || 8000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
