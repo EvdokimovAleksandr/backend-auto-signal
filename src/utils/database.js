@@ -11,3 +11,4 @@ process.on("beforeExit", async () => {
 
 module.exports = prisma;
 
+

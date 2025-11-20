@@ -8,7 +8,16 @@
     "start": "node dist/index.js",
     "test": "jest",
     "test-api": "node test-api.js",
-    "check-prisma": "node check-prisma.js"
+    "test-backend": "node test-backend.js",
+    "check-prisma": "node check-prisma.js",
+    "check-db": "node check-database.js",
+    "add-test-data": "node add-test-data.js",
+    "restore-db": "node restore-database.js",
+    "restore-db-simple": "node restore-database-simple.js",
+    "restore-db-alt": "node restore-database-alt.js",
+    "restore-db-node": "node restore-database-node.js",
+    "find-psql": "node find-psql.js",
+    "sync-prisma": "node sync-prisma.js"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +29,7 @@
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "pg": "^8.16.3",
     "prisma": "^6.15.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"

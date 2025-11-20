@@ -250,7 +250,8 @@ const filesController = {
       // Проверяем, есть ли у пользователя премиум-подписка
       let hasPremium = false;
       if (userId) {
-        const premiumUser = await prisma.premium_users.findUnique({
+        // Используем findFirst, так как user_id не является уникальным ключом в схеме
+        const premiumUser = await prisma.premium_users.findFirst({
           where: { user_id: BigInt(userId) },
         });
 

@@ -8,7 +8,8 @@ const subscriptionController = {
     try {
       const { userId } = req.params;
 
-      const premiumUser = await prisma.premium_users.findUnique({
+      // Используем findFirst, так как user_id не является уникальным ключом в схеме
+      const premiumUser = await prisma.premium_users.findFirst({
         where: { user_id: BigInt(userId) },
       });
 
@@ -21,9 +22,9 @@ const subscriptionController = {
       const subEnd = new Date(premiumUser.sub_end);
 
       if (currentTime > subEnd) {
-        // Подписка истекла, удаляем ее
+        // Подписка истекла, удаляем ее (используем id, так как user_id не уникальный)
         await prisma.premium_users.delete({
-          where: { user_id: BigInt(userId) },
+          where: { id: premiumUser.id },
         });
         return res.status(404).json({ error: "Подписка истекла" });
       }
@@ -48,22 +49,35 @@ const subscriptionController = {
       const subStartString = subStart.toISOString();
       const subEndString = subEnd.toISOString();
 
-      const subscription = await prisma.premium_users.upsert({
+      // Сначала проверяем, есть ли уже подписка у пользователя
+      const existingSubscription = await prisma.premium_users.findFirst({
         where: { user_id: BigInt(userId) },
-        update: {
-          sub_start: subStartString,
-          sub_end: subEndString,
-          period_months: periodMonths,
-          status: "active",
-        },
-        create: {
-          user_id: BigInt(userId),
-          sub_start: subStartString,
-          sub_end: subEndString,
-          period_months: periodMonths,
-          status: "active",
-        },
       });
+
+      let subscription;
+      if (existingSubscription) {
+        // Обновляем существующую подписку
+        subscription = await prisma.premium_users.update({
+          where: { id: existingSubscription.id },
+          data: {
+            sub_start: subStartString,
+            sub_end: subEndString,
+            period_months: periodMonths,
+            status: "active",
+          },
+        });
+      } else {
+        // Создаем новую подписку
+        subscription = await prisma.premium_users.create({
+          data: {
+            user_id: BigInt(userId),
+            sub_start: subStartString,
+            sub_end: subEndString,
+            period_months: periodMonths,
+            status: "active",
+          },
+        });
+      }
 
       res.json(subscription);
     } catch (error) {
@@ -76,8 +90,18 @@ const subscriptionController = {
     try {
       const { userId } = req.params;
 
-      await prisma.premium_users.delete({
+      // Находим подписку по user_id
+      const premiumUser = await prisma.premium_users.findFirst({
         where: { user_id: BigInt(userId) },
+      });
+
+      if (!premiumUser) {
+        return res.status(404).json({ error: "Подписка не найдена" });
+      }
+
+      // Удаляем по id
+      await prisma.premium_users.delete({
+        where: { id: premiumUser.id },
       });
 
       res.json({ message: "Подписка удалена" });
