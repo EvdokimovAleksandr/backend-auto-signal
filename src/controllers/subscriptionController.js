@@ -44,18 +44,24 @@ const subscriptionController = {
       const subEnd = new Date();
       subEnd.setMonth(subEnd.getMonth() + periodMonths);
 
+      // Конвертируем даты в строки ISO для хранения в БД
+      const subStartString = subStart.toISOString();
+      const subEndString = subEnd.toISOString();
+
       const subscription = await prisma.premium_users.upsert({
         where: { user_id: BigInt(userId) },
         update: {
-          sub_start: subStart,
-          sub_end: subEnd,
+          sub_start: subStartString,
+          sub_end: subEndString,
           period_months: periodMonths,
+          status: "active",
         },
         create: {
           user_id: BigInt(userId),
-          sub_start: subStart,
-          sub_end: subEnd,
+          sub_start: subStartString,
+          sub_end: subEndString,
           period_months: periodMonths,
+          status: "active",
         },
       });
 

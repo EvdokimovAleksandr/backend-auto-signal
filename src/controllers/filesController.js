@@ -136,14 +136,27 @@ const filesController = {
       // Получаем информацию о годе, модели и марке
       const year = await prisma.years.findUnique({
         where: { id: parseInt(yearId) },
-        include: {
-          model: {
-            include: {
-              brand: true,
-            },
-          },
-        },
       });
+
+      if (!year || !year.model_id) {
+        return res.status(404).json({ error: "Год не найден или не привязан к модели" });
+      }
+
+      const model = await prisma.models.findUnique({
+        where: { id: year.model_id },
+      });
+
+      if (!model || !model.brand_id) {
+        return res.status(404).json({ error: "Модель не найдена или не привязана к марке" });
+      }
+
+      const brand = await prisma.brands.findUnique({
+        where: { id: model.brand_id },
+      });
+
+      if (!brand) {
+        return res.status(404).json({ error: "Марка не найдена" });
+      }
 
       if (!year) {
         return res.status(404).json({ error: "Год не найден" });
@@ -156,30 +169,47 @@ const filesController = {
         return res.status(400).json({ error: "Неверная ссылка Google Drive" });
       }
 
-      // Создаем или обновляем запись файла
-      const file = await prisma.files.upsert({
-        where: {
-          year_id: parseInt(yearId),
-        },
-        update: {
-          photo: downloadUrl,
-        },
-        create: {
-          year_id: parseInt(yearId),
-          photo: downloadUrl,
-        },
+      // Проверяем, существует ли файл для этого года
+      let file = await prisma.files.findFirst({
+        where: { year_id: parseInt(yearId) },
       });
 
-      // Записываем статистику доступа
-      await prisma.file_access_stats.create({
-        data: {
-          user_id: req.user.id,
-          brand: year.model.brand.brand,
-          model: year.model.model,
+      if (file) {
+        // Обновляем существующий файл
+        file = await prisma.files.update({
+          where: { id: file.id },
+          data: { photo: downloadUrl },
+        });
+      } else {
+        // Создаем новый файл
+        file = await prisma.files.create({
+          data: {
+            year_id: parseInt(yearId),
+            photo: downloadUrl,
+            year: year.year,
+            model: model.model,
+            brand: brand.brand,
+          },
+        });
+      }
+
+      // Записываем статистику доступа (если есть пользователь)
+      if (req.user?.id) {
+        try {
+          await prisma.file_access_stats.create({
+            data: {
+              user_id: BigInt(req.user.id),
+          brand: brand.brand,
+          model: model.model,
           year: year.year,
-          file_id: file.id,
-        },
-      });
+              file_id: file.id,
+            },
+          });
+        } catch (error) {
+          // Игнорируем ошибки статистики
+          console.error("Error creating access stats:", error);
+        }
+      }
 
       res.json(file);
     } catch (error) {
@@ -195,17 +225,26 @@ const filesController = {
 
       const year = await prisma.years.findUnique({
         where: { id: parseInt(yearId) },
-        include: {
-          model: {
-            include: {
-              brand: true,
-            },
-          },
-        },
       });
 
-      if (!year) {
-        return res.status(404).json({ error: "Год не найден" });
+      if (!year || !year.model_id) {
+        return res.status(404).json({ error: "Год не найден или не привязан к модели" });
+      }
+
+      const model = await prisma.models.findUnique({
+        where: { id: year.model_id },
+      });
+
+      if (!model || !model.brand_id) {
+        return res.status(404).json({ error: "Модель не найдена или не привязана к марке" });
+      }
+
+      const brand = await prisma.brands.findUnique({
+        where: { id: model.brand_id },
+      });
+
+      if (!brand) {
+        return res.status(404).json({ error: "Марка не найдена" });
       }
 
       // Проверяем, есть ли у пользователя премиум-подписка
@@ -245,7 +284,7 @@ const filesController = {
         }
 
         // Проверяем доступ к премиум-файлам
-        if (hasPremium || req.user?.isAdmin) {
+        if (hasPremium) {
           if (file.premium_photo) {
             fileData.premium_photo = file.premium_photo;
           }
@@ -260,8 +299,8 @@ const filesController = {
 
       res.json({
         year: year.year,
-        model: year.model.model,
-        brand: year.model.brand.brand,
+        model: model.model,
+        brand: brand.brand,
         files: accessibleFiles,
       });
     } catch (error) {
@@ -291,19 +330,54 @@ const filesController = {
         return res.status(400).json({ error: "Неверная ссылка Google Drive" });
       }
 
-      // Создаем или обновляем запись файла
-      const file = await prisma.files.upsert({
-        where: {
-          year_id: parseInt(yearId),
-        },
-        update: {
-          premium_photo: downloadUrl,
-        },
-        create: {
-          year_id: parseInt(yearId),
-          premium_photo: downloadUrl,
-        },
+      // Получаем информацию о годе, модели и марке
+      const year = await prisma.years.findUnique({
+        where: { id: parseInt(yearId) },
       });
+
+      if (!year || !year.model_id) {
+        return res.status(404).json({ error: "Год не найден или не привязан к модели" });
+      }
+
+      const model = await prisma.models.findUnique({
+        where: { id: year.model_id },
+      });
+
+      if (!model || !model.brand_id) {
+        return res.status(404).json({ error: "Модель не найдена или не привязана к марке" });
+      }
+
+      const brand = await prisma.brands.findUnique({
+        where: { id: model.brand_id },
+      });
+
+      if (!brand) {
+        return res.status(404).json({ error: "Марка не найдена" });
+      }
+
+      // Проверяем, существует ли файл для этого года
+      let file = await prisma.files.findFirst({
+        where: { year_id: parseInt(yearId) },
+      });
+
+      if (file) {
+        // Обновляем существующий файл
+        file = await prisma.files.update({
+          where: { id: file.id },
+          data: { premium_photo: downloadUrl },
+        });
+      } else {
+        // Создаем новый файл
+        file = await prisma.files.create({
+          data: {
+            year_id: parseInt(yearId),
+            premium_photo: downloadUrl,
+            year: year.year,
+            model: model.model,
+            brand: brand.brand,
+          },
+        });
+      }
 
       res.json(file);
     } catch (error) {
@@ -384,19 +458,54 @@ const filesController = {
         return res.status(400).json({ error: "Неверная ссылка Google Drive" });
       }
 
-      // Создаем или обновляем запись файла
-      const file = await prisma.files.upsert({
-        where: {
-          year_id: parseInt(yearId),
-        },
-        update: {
-          pdf: downloadUrl,
-        },
-        create: {
-          year_id: parseInt(yearId),
-          pdf: downloadUrl,
-        },
+      // Получаем информацию о годе, модели и марке
+      const year = await prisma.years.findUnique({
+        where: { id: parseInt(yearId) },
       });
+
+      if (!year || !year.model_id) {
+        return res.status(404).json({ error: "Год не найден или не привязан к модели" });
+      }
+
+      const model = await prisma.models.findUnique({
+        where: { id: year.model_id },
+      });
+
+      if (!model || !model.brand_id) {
+        return res.status(404).json({ error: "Модель не найдена или не привязана к марке" });
+      }
+
+      const brand = await prisma.brands.findUnique({
+        where: { id: model.brand_id },
+      });
+
+      if (!brand) {
+        return res.status(404).json({ error: "Марка не найдена" });
+      }
+
+      // Проверяем, существует ли файл для этого года
+      let file = await prisma.files.findFirst({
+        where: { year_id: parseInt(yearId) },
+      });
+
+      if (file) {
+        // Обновляем существующий файл
+        file = await prisma.files.update({
+          where: { id: file.id },
+          data: { pdf: downloadUrl },
+        });
+      } else {
+        // Создаем новый файл
+        file = await prisma.files.create({
+          data: {
+            year_id: parseInt(yearId),
+            pdf: downloadUrl,
+            year: year.year,
+            model: model.model,
+            brand: brand.brand,
+          },
+        });
+      }
 
       res.json(file);
     } catch (error) {
@@ -452,19 +561,54 @@ const filesController = {
         return res.status(400).json({ error: "Неверная ссылка Google Drive" });
       }
 
-      // Создаем или обновляем запись файла
-      const file = await prisma.files.upsert({
-        where: {
-          year_id: parseInt(yearId),
-        },
-        update: {
-          premium_pdf: downloadUrl,
-        },
-        create: {
-          year_id: parseInt(yearId),
-          premium_pdf: downloadUrl,
-        },
+      // Получаем информацию о годе, модели и марке
+      const year = await prisma.years.findUnique({
+        where: { id: parseInt(yearId) },
       });
+
+      if (!year || !year.model_id) {
+        return res.status(404).json({ error: "Год не найден или не привязан к модели" });
+      }
+
+      const model = await prisma.models.findUnique({
+        where: { id: year.model_id },
+      });
+
+      if (!model || !model.brand_id) {
+        return res.status(404).json({ error: "Модель не найдена или не привязана к марке" });
+      }
+
+      const brand = await prisma.brands.findUnique({
+        where: { id: model.brand_id },
+      });
+
+      if (!brand) {
+        return res.status(404).json({ error: "Марка не найдена" });
+      }
+
+      // Проверяем, существует ли файл для этого года
+      let file = await prisma.files.findFirst({
+        where: { year_id: parseInt(yearId) },
+      });
+
+      if (file) {
+        // Обновляем существующий файл
+        file = await prisma.files.update({
+          where: { id: file.id },
+          data: { premium_pdf: downloadUrl },
+        });
+      } else {
+        // Создаем новый файл
+        file = await prisma.files.create({
+          data: {
+            year_id: parseInt(yearId),
+            premium_pdf: downloadUrl,
+            year: year.year,
+            model: model.model,
+            brand: brand.brand,
+          },
+        });
+      }
 
       res.json(file);
     } catch (error) {

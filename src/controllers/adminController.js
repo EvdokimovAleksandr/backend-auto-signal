@@ -1,4 +1,5 @@
 const prisma = require("../utils/database");
+const { checkAdminStatus } = require("../middleware/adminCheck");
 
 const adminController = {
   // Получить статистику
@@ -203,14 +204,7 @@ const adminController = {
   manageAdmins: async (req, res) => {
     try {
       const admins = await prisma.admin_users.findMany({
-        include: {
-          user: {
-            select: {
-              username: true,
-              full_name: true,
-            },
-          },
-        },
+        orderBy: { added_at: "desc" },
       });
 
       res.json(admins);
@@ -239,6 +233,15 @@ const adminController = {
             full_name: username, // Можно изменить, если есть больше информации
           },
         });
+      }
+
+      // Проверяем, не является ли пользователь уже администратором
+      const existingAdmin = await prisma.admin_users.findUnique({
+        where: { user_id: BigInt(user_id) },
+      });
+
+      if (existingAdmin) {
+        return res.status(400).json({ error: "Пользователь уже является администратором" });
       }
 
       // Добавляем администратора
@@ -275,20 +278,6 @@ const adminController = {
   listAdmins: async (req, res) => {
     try {
       const admins = await prisma.admin_users.findMany({
-        include: {
-          user: {
-            select: {
-              username: true,
-              full_name: true,
-            },
-          },
-          added_by_user: {
-            select: {
-              username: true,
-              full_name: true,
-            },
-          },
-        },
         orderBy: { added_at: "desc" },
       });
 
@@ -346,11 +335,10 @@ const adminController = {
       const { fileId } = req.params;
       const { description } = req.body;
 
-      // Обновляем описание файла
-      // Предполагаем, что у нас есть таблица files с полем description
+      // Обновляем описание файла (используем поле caption)
       const updatedFile = await prisma.files.update({
         where: { id: parseInt(fileId) },
-        data: { description: description },
+        data: { caption: description },
       });
 
       res.json(updatedFile);

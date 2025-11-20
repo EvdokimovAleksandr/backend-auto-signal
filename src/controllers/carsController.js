@@ -148,13 +148,26 @@ const carsController = {
         // Находим марку
         const brand = await prisma.brands.findFirst({
           where: { brand: brandName },
-          include: {
-            models: {
-              include: {
-                years: true,
-              },
-            },
-          },
+        });
+
+        if (!brand) {
+          results.push({
+            brand: brandName,
+            status: "not_found",
+            message: "Марка не найдена",
+          });
+          continue;
+        }
+
+        // Находим все модели этой марки
+        const models = await prisma.models.findMany({
+          where: { brand_id: brand.id },
+        });
+
+        // Находим все годы для этих моделей
+        const modelIds = models.map((m) => m.id);
+        const years = await prisma.years.findMany({
+          where: { model_id: { in: modelIds } },
         });
 
         if (!brand) {
@@ -431,14 +444,20 @@ const carsController = {
 
       const models = await prisma.models.findMany({
         where: whereCondition,
-        include: {
-          brand: {
-            select: {
-              brand: true,
-            },
-          },
-        },
       });
+
+      // Добавляем информацию о марке для каждой модели
+      const modelsWithBrand = await Promise.all(
+        models.map(async (model) => {
+          if (model.brand_id) {
+            const brand = await prisma.brands.findUnique({
+              where: { id: model.brand_id },
+            });
+            return { ...model, brand: brand ? { brand: brand.brand } : null };
+          }
+          return model;
+        })
+      );
 
       res.json(models);
     } catch (error) {
@@ -461,7 +480,14 @@ const carsController = {
       // Получаем информацию о модели и марке для связи
       const model = await prisma.models.findUnique({
         where: { id: parseInt(modelId) },
-        include: { brand: true },
+      });
+
+      if (!model || !model.brand_id) {
+        return res.status(404).json({ error: "Модель не найдена или не привязана к марке" });
+      }
+
+      const brand = await prisma.brands.findUnique({
+        where: { id: model.brand_id },
       });
 
       if (!model) {
@@ -492,7 +518,7 @@ const carsController = {
               year: yearValue,
               model_id: parseInt(modelId),
               model: model.model,
-              brand: model.brand.brand,
+              brand: brand.brand,
             },
           });
           results.push({ year: yearValue, status: "created", id: newYear.id });
@@ -527,9 +553,11 @@ const carsController = {
             year: yearValue,
             model_id: parseInt(modelId),
           },
-          include: {
-            files: true,
-          },
+        });
+
+        // Проверяем наличие файлов для этого года
+        const files = await prisma.files.findMany({
+          where: { year_id: year?.id },
         });
 
         if (!year) {
@@ -628,16 +656,36 @@ const carsController = {
 
       const years = await prisma.years.findMany({
         where: whereCondition,
-        include: {
-          model: {
-            include: {
-              brand: true,
-            },
-          },
-        },
       });
 
-      res.json(years);
+      // Добавляем информацию о модели и марке для каждого года
+      const yearsWithDetails = await Promise.all(
+        years.map(async (year) => {
+          let modelInfo = null;
+          let brandInfo = null;
+
+          if (year.model_id) {
+            const model = await prisma.models.findUnique({
+              where: { id: year.model_id },
+            });
+            if (model) {
+              modelInfo = model;
+              if (model.brand_id) {
+                brandInfo = await prisma.brands.findUnique({
+                  where: { id: model.brand_id },
+                });
+              }
+            }
+          }
+
+          return {
+            ...year,
+            model: modelInfo ? { ...modelInfo, brand: brandInfo } : null,
+          };
+        })
+      );
+
+      res.json(yearsWithDetails || years);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
