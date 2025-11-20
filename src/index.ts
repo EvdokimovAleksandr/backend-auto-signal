@@ -48,6 +48,18 @@ const adminRoutes = require("./routes/admin");
 // @ts-ignore
 const usersRoutes = require("./routes/users");
 
+// Swagger документация
+// @ts-ignore
+const swaggerUi = require("swagger-ui-express");
+// @ts-ignore
+const swaggerSpec = require("./config/swagger");
+
+// Swagger UI endpoint
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: "Auto Signal API Documentation"
+}));
+
 app.use("/api/cars", carsRoutes);
 app.use("/api/files", filesRoutes);
 app.use("/api/info", infoRoutes);
