@@ -21,6 +21,7 @@ router.put("/models", requireAdmin, carsController.updateModel); // Обновл
 router.get("/models/search", carsController.searchModel); // Поиск
 
 // Маршруты для годов выпуска
+router.get("/years", carsController.getYearsByModel); // Получить годы по модели
 router.post("/years/batch", requireAdmin, carsController.addYears);
 router.delete("/years/batch", requireAdmin, carsController.deleteYears);
 router.put("/years", requireAdmin, carsController.updateYear);

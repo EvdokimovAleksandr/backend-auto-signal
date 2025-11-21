@@ -1,4 +1,5 @@
 const prisma = require("../utils/database");
+const { convertToViewLink } = require("../utils/googleDrive");
 
 const filesController = {
   // Получить марки для управления описаниями
@@ -276,8 +277,9 @@ const filesController = {
         };
 
         // Проверяем доступ к обычным файлам
+        // Конвертируем Google Drive ссылки в ссылки для просмотра изображений
         if (file.photo) {
-          fileData.photo = file.photo;
+          fileData.photo = convertToViewLink(file.photo) || file.photo;
         }
 
         if (file.pdf) {
@@ -287,7 +289,7 @@ const filesController = {
         // Проверяем доступ к премиум-файлам
         if (hasPremium) {
           if (file.premium_photo) {
-            fileData.premium_photo = file.premium_photo;
+            fileData.premium_photo = convertToViewLink(file.premium_photo) || file.premium_photo;
           }
 
           if (file.premium_pdf) {
@@ -678,6 +680,131 @@ const filesController = {
       res.json(files);
     } catch (error) {
       res.status(500).json({ error: error.message });
+    }
+  },
+
+  // Прокси для загрузки изображений из Google Drive (обход CORS)
+  getImageProxy: async (req, res) => {
+    console.log(`[Image Proxy] Запрос получен: fileId=${req.params.fileId}`);
+    try {
+      const { fileId } = req.params;
+      
+      if (!fileId) {
+        console.log(`[Image Proxy] Ошибка: File ID не указан`);
+        return res.status(400).json({ error: "File ID не указан" });
+      }
+      
+      console.log(`[Image Proxy] Обрабатываем fileId: ${fileId}`);
+
+      // Используем https для загрузки изображения
+      const https = require('https');
+      
+      // Пробуем несколько вариантов ссылок Google Drive
+      const tryDownloadImage = (url, attempt = 1, isThumbnail = false) => {
+        console.log(`[Image Proxy] Попытка ${attempt} для fileId ${fileId}: ${url.substring(0, 100)}...`);
+        
+        const request = https.get(url, { followRedirect: false }, (driveRes) => {
+          console.log(`[Image Proxy] Ответ: статус ${driveRes.statusCode}, Content-Type: ${driveRes.headers['content-type']}`);
+          
+          // Обрабатываем редиректы
+          if (driveRes.statusCode === 302 || driveRes.statusCode === 301 || driveRes.statusCode === 303 || driveRes.statusCode === 307) {
+            const redirectUrl = driveRes.headers.location;
+            console.log(`[Image Proxy] Редирект ${driveRes.statusCode} на: ${redirectUrl}`);
+            if (redirectUrl && attempt < 5) {
+              // Если редирект относительный, делаем его абсолютным
+              const absoluteUrl = redirectUrl.startsWith('http') ? redirectUrl : `https://drive.google.com${redirectUrl}`;
+              return tryDownloadImage(absoluteUrl, attempt + 1, isThumbnail);
+            }
+          }
+          
+          // Проверяем Content-Type
+          const contentType = driveRes.headers['content-type'] || '';
+          
+          // Если получили HTML (Google Drive показывает страницу предупреждения)
+          if (contentType.includes('text/html')) {
+            console.log(`[Image Proxy] ❌ Получен HTML вместо изображения (попытка ${attempt})`);
+            driveRes.destroy();
+            
+            // Пробуем альтернативные методы
+            if (isThumbnail && attempt === 1) {
+              const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+              return tryDownloadImage(downloadUrl, 2, false);
+            }
+            if (!isThumbnail && attempt === 2) {
+              const viewUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+              return tryDownloadImage(viewUrl, 3, false);
+            }
+            if (!res.headersSent) {
+              return res.status(404).json({ error: "Изображение недоступно или требует авторизации" });
+            }
+            return;
+          }
+          
+          if (driveRes.statusCode !== 200) {
+            console.log(`[Image Proxy] Неуспешный статус: ${driveRes.statusCode}`);
+            if (!res.headersSent) {
+              // Пробуем альтернативные методы
+              if (attempt === 1 && isThumbnail) {
+                const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+                return tryDownloadImage(downloadUrl, 2, false);
+              }
+              return res.status(404).json({ error: "Изображение не найдено" });
+            }
+            return;
+          }
+
+          console.log(`[Image Proxy] ✅ Успешно! Загружаем изображение, Content-Type: ${contentType || 'image/jpeg'}`);
+          
+          // ВАЖНО: Устанавливаем заголовки ДО начала передачи данных
+          if (!res.headersSent) {
+            res.setHeader('Content-Type', contentType || 'image/jpeg');
+            res.setHeader('Cache-Control', 'public, max-age=31536000');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+          }
+
+          // Передаем данные изображения клиенту
+          driveRes.pipe(res);
+        });
+        
+        request.on('error', (error) => {
+          console.error(`[Image Proxy] Ошибка сети (попытка ${attempt}):`, error.message);
+          if (!res.headersSent) {
+            // Пробуем альтернативные методы
+            if (attempt === 1 && isThumbnail) {
+              const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+              return tryDownloadImage(downloadUrl, 2, false);
+            }
+            if (attempt === 2) {
+              const viewUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+              return tryDownloadImage(viewUrl, 3, false);
+            }
+            res.status(500).json({ error: "Ошибка при загрузке изображения" });
+          }
+        });
+        
+        // Таймаут для запроса
+        request.setTimeout(10000, () => {
+          console.error(`[Image Proxy] Таймаут запроса (попытка ${attempt})`);
+          request.destroy();
+          if (!res.headersSent) {
+            if (attempt === 1 && isThumbnail) {
+              const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+              return tryDownloadImage(downloadUrl, 2, false);
+            }
+            res.status(504).json({ error: "Таймаут при загрузке изображения" });
+          }
+        });
+      };
+
+      // Начинаем с thumbnail API, так как он более надежен для изображений
+      const thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1920`;
+      tryDownloadImage(thumbnailUrl, 1, true);
+      
+    } catch (error) {
+      console.error('Ошибка в getImageProxy:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message });
+      }
     }
   },
 };

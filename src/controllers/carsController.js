@@ -75,6 +75,20 @@ const carsController = {
     }
   },
 
+  // Получить годы по модели
+  getYearsByModel: async (req, res) => {
+    try {
+      const { modelId } = req.query;
+      const years = await prisma.years.findMany({
+        where: { model_id: parseInt(modelId) },
+        orderBy: { year: "asc" },
+      });
+      res.json(years);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
   // Добавить модель
   addModel: async (req, res) => {
     try {

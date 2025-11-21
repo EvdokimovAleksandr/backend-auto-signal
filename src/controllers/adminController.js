@@ -86,7 +86,8 @@ const adminController = {
   getTopModels: async (req, res) => {
     try {
       // Проверяем права администратора
-      const isAdmin = await checkAdminStatus(req.user.id);
+      const userId = req.user.user_id ? req.user.user_id.toString() : req.user.id?.toString();
+      const isAdmin = await checkAdminStatus(userId);
       if (!isAdmin) {
         return res.status(403).json({ error: "Access denied" });
       }
@@ -123,7 +124,8 @@ const adminController = {
   getDetailedStats: async (req, res) => {
     try {
       // Проверяем права администратора
-      const isAdmin = await checkAdminStatus(req.user.id);
+      const userId = req.user.user_id ? req.user.user_id.toString() : req.user.id?.toString();
+      const isAdmin = await checkAdminStatus(userId);
       if (!isAdmin) {
         return res.status(403).json({ error: "Access denied" });
       }
@@ -217,7 +219,8 @@ const adminController = {
   addAdmin: async (req, res) => {
     try {
       const { user_id, username } = req.body;
-      const added_by = req.user.id; // ID текущего пользователя
+      // Используем user_id (Telegram ID) текущего пользователя для added_by
+      const added_by = req.user.user_id ? req.user.user_id.toString() : req.user.id?.toString();
 
       // Сначала проверяем, существует ли пользователь
       let user = await prisma.users.findUnique({

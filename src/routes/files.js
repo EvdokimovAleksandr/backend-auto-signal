@@ -35,6 +35,9 @@ router.post("/photos", requireAdmin, filesController.addPhoto);
 router.post("/photos/premium", requireAdmin, filesController.addPremiumPhoto);
 router.get("/years/:yearId/files", filesController.getFilesByYear);
 
+// Прокси для загрузки изображений из Google Drive (обход CORS)
+router.get("/image/:fileId", filesController.getImageProxy);
+
 // Маршруты для работы с файлами
 router.delete("/photos/:fileId", requireAdmin, filesController.deletePhoto);
 

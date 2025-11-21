@@ -1,35 +1,113 @@
 const prisma = require("../utils/database");
 const jwt = require("jsonwebtoken");
 const { checkAdminStatus } = require("../middleware/adminCheck");
+const { resolveTelegramUser } = require("../utils/telegramBot");
+const { validateTelegramInput, validateTelegramUserId, validateUserName } = require("../utils/validation");
 
 const usersController = {
   // Логин пользователя (генерация JWT токена)
   login: async (req, res) => {
     try {
-      const { userId, username, name } = req.body;
+      // Поддерживаем два формата:
+      // 1. { userId: "123456789" } - прямой User ID
+      // 2. { telegramInput: "@username" или "123456789" } - username или User ID
+      const { userId, username, name, telegramInput } = req.body;
 
-      if (!userId) {
-        return res.status(400).json({ error: "Необходим userId" });
+      // Валидация входных данных
+      if (telegramInput) {
+        const inputValidation = validateTelegramInput(telegramInput);
+        if (!inputValidation.valid) {
+          return res.status(400).json({ error: inputValidation.error });
+        }
+      } else if (userId) {
+        const userIdValidation = validateTelegramUserId(userId);
+        if (!userIdValidation.valid) {
+          return res.status(400).json({ error: userIdValidation.error });
+        }
+      } else {
+        return res.status(400).json({ 
+          error: "Необходим userId или telegramInput (username или числовой User ID)" 
+        });
+      }
+
+      // Валидация опциональных полей
+      if (name !== undefined) {
+        const nameValidation = validateUserName(name);
+        if (!nameValidation.valid) {
+          return res.status(400).json({ error: nameValidation.error });
+        }
+      }
+
+      let resolvedUserId = userId;
+      let resolvedUsername = username;
+      let resolvedName = name;
+
+      // Если передан telegramInput (username или @username), пытаемся получить User ID
+      if (telegramInput && !userId) {
+        try {
+          const botToken = process.env.TELEGRAM_BOT_TOKEN;
+          const resolved = await resolveTelegramUser(telegramInput, botToken);
+          resolvedUserId = resolved.userId;
+          resolvedUsername = resolved.username || resolvedUsername;
+          resolvedName = resolved.name || resolvedName;
+        } catch (error) {
+          // Если не удалось получить через Bot API, пробуем найти в БД
+          if (telegramInput.startsWith('@') || /^[a-zA-Z0-9_]+$/.test(telegramInput)) {
+            const cleanUsername = telegramInput.replace(/^@/, '');
+            const dbUser = await prisma.users.findFirst({
+              where: {
+                username: cleanUsername,
+              },
+            });
+
+            if (dbUser) {
+              resolvedUserId = dbUser.user_id.toString();
+              resolvedUsername = dbUser.username;
+              resolvedName = dbUser.name;
+            } else {
+              // Если не нашли в БД и нет Bot Token - возвращаем понятную ошибку
+              if (!process.env.TELEGRAM_BOT_TOKEN) {
+                return res.status(400).json({ 
+                  error: `Не удалось найти пользователя "${telegramInput}" в базе данных.`,
+                  hint: "Для автоматического получения User ID по username настройте TELEGRAM_BOT_TOKEN в .env файле, или используйте числовой User ID"
+                });
+              }
+              return res.status(400).json({ 
+                error: `Не удалось найти пользователя "${telegramInput}". Убедитесь, что указан правильный username или используйте числовой User ID.`
+              });
+            }
+          } else {
+            return res.status(400).json({ 
+              error: error.message || "Неверный формат. Укажите @username или числовой User ID"
+            });
+          }
+        }
+      }
+
+      if (!resolvedUserId) {
+        return res.status(400).json({ 
+          error: "Не удалось определить User ID. Убедитесь, что указан правильный userId или telegramInput" 
+        });
       }
 
       // Используем upsert для создания или обновления пользователя
       // Это избегает race conditions и проблем с уникальными ограничениями
       const user = await prisma.users.upsert({
-        where: { user_id: BigInt(userId) },
+        where: { user_id: BigInt(resolvedUserId) },
         update: {
-          username: username !== undefined ? username : undefined,
-          name: name !== undefined ? name : undefined,
+          username: resolvedUsername !== undefined ? resolvedUsername : undefined,
+          name: resolvedName !== undefined ? resolvedName : undefined,
         },
         create: {
-          user_id: BigInt(userId),
-          username: username || null,
-          name: name || null,
+          user_id: BigInt(resolvedUserId),
+          username: resolvedUsername || null,
+          name: resolvedName || null,
         },
       });
 
       // Генерируем JWT токен (используем внутренний ID для админ проверки)
       const token = jwt.sign(
-        { userId: userId.toString(), id: user.id },
+        { userId: resolvedUserId.toString(), id: user.id },
         process.env.JWT_SECRET || "default-secret-key",
         { expiresIn: "30d" }
       );
@@ -69,8 +147,21 @@ const usersController = {
     try {
       const { userId, username, name } = req.body;
 
+      // Валидация входных данных
       if (!userId) {
         return res.status(400).json({ error: "Необходим userId" });
+      }
+
+      const userIdValidation = validateTelegramUserId(userId);
+      if (!userIdValidation.valid) {
+        return res.status(400).json({ error: userIdValidation.error });
+      }
+
+      if (name !== undefined) {
+        const nameValidation = validateUserName(name);
+        if (!nameValidation.valid) {
+          return res.status(400).json({ error: nameValidation.error });
+        }
       }
 
       // Используем upsert для создания или обновления пользователя

@@ -10,7 +10,13 @@ const authenticateToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const secret = process.env.JWT_SECRET || "default-secret-key";
+    const decoded = jwt.verify(token, secret);
+    
+    if (!decoded.userId) {
+      return res.status(403).json({ error: "Недействительный токен" });
+    }
+
     const user = await prisma.users.findUnique({
       where: { user_id: BigInt(decoded.userId) },
     });
@@ -22,7 +28,10 @@ const authenticateToken = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    return res.status(403).json({ error: "Недействительный токен" });
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(403).json({ error: "Недействительный токен" });
+    }
+    return res.status(500).json({ error: "Ошибка аутентификации" });
   }
 };
 

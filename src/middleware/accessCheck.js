@@ -1,10 +1,12 @@
 const prisma = require("../utils/database");
+const { checkAdminStatus } = require("./adminCheck");
 
 // Проверка, имеет ли пользователь доступ к премиум-контенту
 const checkPremiumAccess = async (userId) => {
   if (!userId) return false;
 
-  const premiumUser = await prisma.premium_users.findUnique({
+  // Используем findFirst, так как user_id не является уникальным ключом в схеме
+  const premiumUser = await prisma.premium_users.findFirst({
     where: { user_id: BigInt(userId) },
   });
 
