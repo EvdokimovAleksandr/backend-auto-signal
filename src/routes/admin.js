@@ -3,6 +3,10 @@ const express = require("express");
 const router = express.Router();
 const adminController = require("../controllers/adminController");
 const { requireAdmin } = require("../middleware/adminCheck");
+const { authenticateToken } = require("../middleware/auth");
+
+// Все админ роуты требуют аутентификации
+router.use(authenticateToken);
 
 router.get("/stats", requireAdmin, adminController.getStats);
 router.put(
