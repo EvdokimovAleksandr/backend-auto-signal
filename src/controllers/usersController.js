@@ -11,7 +11,7 @@ const usersController = {
       // Поддерживаем два формата:
       // 1. { userId: "123456789" } - прямой User ID
       // 2. { telegramInput: "@username" или "123456789" } - username или User ID
-      const { userId, username, name, telegramInput } = req.body;
+      const { userId, username, first_name, last_name, telegramInput } = req.body;
 
       // Валидация входных данных
       if (telegramInput) {
@@ -30,17 +30,12 @@ const usersController = {
         });
       }
 
-      // Валидация опциональных полей
-      if (name !== undefined) {
-        const nameValidation = validateUserName(name);
-        if (!nameValidation.valid) {
-          return res.status(400).json({ error: nameValidation.error });
-        }
-      }
+      // Валидация опциональных полей (убрана, так как name больше не используется)
 
       let resolvedUserId = userId;
       let resolvedUsername = username;
-      let resolvedName = name;
+      let resolvedFirstName = first_name;
+      let resolvedLastName = last_name;
 
       // Если передан telegramInput (username или @username), пытаемся получить User ID
       if (telegramInput && !userId) {
@@ -49,7 +44,8 @@ const usersController = {
           const resolved = await resolveTelegramUser(telegramInput, botToken);
           resolvedUserId = resolved.userId;
           resolvedUsername = resolved.username || resolvedUsername;
-          resolvedName = resolved.name || resolvedName;
+          resolvedFirstName = resolved.first_name;
+          resolvedLastName = resolved.last_name;
         } catch (error) {
           // Если не удалось получить через Bot API, пробуем найти в БД
           if (telegramInput.startsWith('@') || /^[a-zA-Z0-9_]+$/.test(telegramInput)) {
@@ -63,7 +59,8 @@ const usersController = {
             if (dbUser) {
               resolvedUserId = dbUser.user_id.toString();
               resolvedUsername = dbUser.username;
-              resolvedName = dbUser.name;
+              resolvedFirstName = dbUser.first_name;
+              resolvedLastName = dbUser.last_name;
             } else {
               // Если не нашли в БД и нет Bot Token - возвращаем понятную ошибку
               if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -96,18 +93,20 @@ const usersController = {
         where: { user_id: BigInt(resolvedUserId) },
         update: {
           username: resolvedUsername !== undefined ? resolvedUsername : undefined,
-          name: resolvedName !== undefined ? resolvedName : undefined,
+          first_name: resolvedFirstName !== undefined ? resolvedFirstName : undefined,
+          last_name: resolvedLastName !== undefined ? resolvedLastName : undefined,
         },
         create: {
           user_id: BigInt(resolvedUserId),
           username: resolvedUsername || null,
-          name: resolvedName || null,
+          first_name: resolvedFirstName || null,
+          last_name: resolvedLastName || null,
         },
       });
 
-      // Генерируем JWT токен (используем внутренний ID для админ проверки)
+      // Генерируем JWT токен (используем user_id как идентификатор)
       const token = jwt.sign(
-        { userId: resolvedUserId.toString(), id: user.id },
+        { userId: resolvedUserId.toString() },
         process.env.JWT_SECRET || "default-secret-key",
         { expiresIn: "30d" }
       );
@@ -145,7 +144,7 @@ const usersController = {
   // Регистрация пользователя
   registerUser: async (req, res) => {
     try {
-      const { userId, username, name } = req.body;
+      const { userId, username, first_name, last_name } = req.body;
 
       // Валидация входных данных
       if (!userId) {
@@ -157,24 +156,19 @@ const usersController = {
         return res.status(400).json({ error: userIdValidation.error });
       }
 
-      if (name !== undefined) {
-        const nameValidation = validateUserName(name);
-        if (!nameValidation.valid) {
-          return res.status(400).json({ error: nameValidation.error });
-        }
-      }
-
       // Используем upsert для создания или обновления пользователя
       const user = await prisma.users.upsert({
         where: { user_id: BigInt(userId) },
         update: {
           username: username !== undefined ? username : undefined,
-          name: name !== undefined ? name : undefined,
+          first_name: first_name !== undefined ? first_name : undefined,
+          last_name: last_name !== undefined ? last_name : undefined,
         },
         create: {
           user_id: BigInt(userId),
           username: username || null,
-          name: name || null,
+          first_name: first_name || null,
+          last_name: last_name || null,
         },
       });
 
@@ -207,15 +201,14 @@ const usersController = {
   updateUser: async (req, res) => {
     try {
       const { userId } = req.params;
-      const { username, name, stage, page } = req.body;
+      const { username, first_name, last_name } = req.body;
 
       const user = await prisma.users.update({
         where: { user_id: BigInt(userId) },
         data: {
           ...(username !== undefined && { username }),
-          ...(name !== undefined && { name }),
-          ...(stage !== undefined && { stage }),
-          ...(page !== undefined && { page }),
+          ...(first_name !== undefined && { first_name }),
+          ...(last_name !== undefined && { last_name }),
         },
       });
 

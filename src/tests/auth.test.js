@@ -15,7 +15,8 @@ describe('Авторизация и регистрация пользовате�
   // Используем числовые ID для совместимости с BigInt
   const testUserId = String(Date.now());
   const testUsername = 'test_user';
-  const testName = 'Test User';
+  const testFirstName = 'Test';
+  const testLastName = 'User';
 
   // Очистка тестовых данных после всех тестов
   afterAll(async () => {
@@ -51,7 +52,8 @@ describe('Авторизация и регистрация пользовате�
         .send({
           userId: testUserId,
           username: testUsername,
-          name: testName,
+          first_name: testFirstName,
+          last_name: testLastName,
         })
         .expect(200);
 
@@ -59,7 +61,8 @@ describe('Авторизация и регистрация пользовате�
       expect(response.body).toHaveProperty('user');
       expect(String(response.body.user.user_id)).toBe(testUserId);
       expect(response.body.user.username).toBe(testUsername);
-      expect(response.body.user.name).toBe(testName);
+      expect(response.body.user.first_name).toBe(testFirstName);
+      expect(response.body.user.last_name).toBe(testLastName);
       expect(response.body).toHaveProperty('isAdmin');
       expect(response.body).toHaveProperty('isPremium');
     });
@@ -74,7 +77,8 @@ describe('Авторизация и регистрация пользовате�
         .send({
           userId: testUserId,
           username: 'updated_username',
-          name: 'Updated Name',
+          first_name: 'Updated',
+          last_name: 'Name',
         })
         .expect(200);
 
@@ -98,7 +102,8 @@ describe('Авторизация и регистрация пользовате�
         .post('/api/users/login')
         .send({
           username: testUsername,
-          name: testName,
+          first_name: testFirstName,
+          last_name: testLastName,
         })
         .expect(400);
 
@@ -131,19 +136,22 @@ describe('Авторизация и регистрация пользовате�
       }
       
       const newUsername = 'new_username';
-      const newName = 'New Name';
+      const newFirstName = 'New';
+      const newLastName = 'Name';
 
       const response = await request(app)
         .post('/api/users/login')
         .send({
           userId: testUserId,
           username: newUsername,
-          name: newName,
+          first_name: newFirstName,
+          last_name: newLastName,
         })
         .expect(200);
 
       expect(response.body.user.username).toBe(newUsername);
-      expect(response.body.user.name).toBe(newName);
+      expect(response.body.user.first_name).toBe(newFirstName);
+      expect(response.body.user.last_name).toBe(newLastName);
     });
   });
 
@@ -156,14 +164,16 @@ describe('Авторизация и регистрация пользовате�
         .send({
           userId: registerUserId,
           username: 'register_user',
-          name: 'Register User',
+          first_name: 'Register',
+          last_name: 'User',
         })
         .expect(200);
 
       expect(response.body).toHaveProperty('user_id');
       expect(String(response.body.user_id)).toBe(registerUserId);
       expect(response.body.username).toBe('register_user');
-      expect(response.body.name).toBe('Register User');
+      expect(response.body.first_name).toBe('Register');
+      expect(response.body.last_name).toBe('User');
     });
 
     it('должен обновить существующего пользователя при регистрации', async () => {
@@ -176,12 +186,14 @@ describe('Авторизация и регистрация пользовате�
         .send({
           userId: registerUserId,
           username: 'updated_register_user',
-          name: 'Updated Register User',
+          first_name: 'Updated',
+          last_name: 'Register User',
         })
         .expect(200);
 
       expect(response.body.username).toBe('updated_register_user');
-      expect(response.body.name).toBe('Updated Register User');
+      expect(response.body.first_name).toBe('Updated');
+      expect(response.body.last_name).toBe('Register User');
     });
 
     it('должен вернуть ошибку при отсутствии userId', async () => {
@@ -193,7 +205,8 @@ describe('Авторизация и регистрация пользовате�
         .post('/api/users/register')
         .send({
           username: 'test',
-          name: 'Test',
+          first_name: 'Test',
+          last_name: 'User',
         })
         .expect(400);
 
@@ -216,7 +229,8 @@ describe('Авторизация и регистрация пользовате�
         .send({
           userId: meTestUserId,
           username: 'me_test_user',
-          name: 'Me Test User',
+          first_name: 'Me',
+          last_name: 'Test User',
         });
 
       if (loginResponse.status === 200 && loginResponse.body.token) {
@@ -282,7 +296,8 @@ describe('Авторизация и регистрация пользовате�
         .send({
           userId: integrationUserId,
           username: 'integration_user',
-          name: 'Integration User',
+          first_name: 'Integration',
+          last_name: 'User',
         })
         .expect(200);
 
@@ -294,7 +309,8 @@ describe('Авторизация и регистрация пользовате�
         .send({
           userId: integrationUserId,
           username: 'integration_user',
-          name: 'Integration User',
+          first_name: 'Integration',
+          last_name: 'User',
         })
         .expect(200);
 

@@ -21,7 +21,7 @@ const checkPremiumAccess = async (userId) => {
 // Middleware для проверки доступа к премиум-контенту
 const requirePremiumOrAdmin = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.user_id ? req.user.user_id.toString() : req.user.id?.toString();
     const isAdmin = await checkAdminStatus(userId);
     const hasPremium = await checkPremiumAccess(userId);
 
@@ -75,7 +75,7 @@ const checkFileOwnership = async (userId, fileId) => {
 // Middleware для проверки прав доступа к файлу
 const requireFileOwnershipOrAdmin = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.user_id ? req.user.user_id.toString() : req.user.id?.toString();
     const fileId = req.params.fileId;
 
     const hasAccess = await checkFileOwnership(userId, fileId);

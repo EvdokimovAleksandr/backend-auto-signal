@@ -10,7 +10,7 @@ const filesController = {
 
       const [brands, total] = await Promise.all([
         prisma.brands.findMany({
-          orderBy: { brand: "asc" },
+          orderBy: { name: "asc" },
           skip: skip,
           take: parseInt(limit),
         }),
@@ -39,7 +39,7 @@ const filesController = {
 
       const models = await prisma.models.findMany({
         where: { brand_id: parseInt(brandId) },
-        orderBy: { model: "asc" },
+        orderBy: { name: "asc" },
       });
 
       res.json(models);
@@ -55,7 +55,7 @@ const filesController = {
 
       const years = await prisma.years.findMany({
         where: { model_id: parseInt(modelId) },
-        orderBy: { year: "asc" },
+        orderBy: { value: "asc" },
       });
 
       res.json(years);
@@ -187,9 +187,9 @@ const filesController = {
           data: {
             year_id: parseInt(yearId),
             photo: downloadUrl,
-            year: year.year,
-            model: model.model,
-            brand: brand.brand,
+            year: year.value,
+            model: model.name,
+            brand: brand.name,
           },
         });
       }
@@ -199,10 +199,10 @@ const filesController = {
         try {
           await prisma.file_access_stats.create({
             data: {
-              user_id: BigInt(req.user.id),
-          brand: brand.brand,
-          model: model.model,
-          year: year.year,
+              user_id: BigInt(req.user.user_id),
+          brand: brand.name,
+          model: model.name,
+          year: year.value,
               file_id: file.id,
             },
           });
@@ -273,27 +273,46 @@ const filesController = {
         const fileData = {
           id: file.id,
           year_id: file.year_id,
-          caption: file.caption,
+          name: file.name || null,
+          path: file.path || null,
+          is_premium: file.is_premium || false,
         };
 
-        // Проверяем доступ к обычным файлам
-        // Конвертируем Google Drive ссылки в ссылки для просмотра изображений
-        if (file.photo) {
-          fileData.photo = convertToViewLink(file.photo) || file.photo;
-        }
+        // Определяем тип файла
+        // Для Google Drive ссылок проверяем name, так как path не содержит расширения
+        const fileName = (file.name || '').toLowerCase();
+        const filePath = (file.path || '').toLowerCase();
+        
+        // Проверяем, является ли файл PDF
+        const isPdf = fileName.includes('pdf') || 
+                     filePath.includes('.pdf') ||
+                     filePath.includes('pdf');
+        
+        // Если не PDF и не пустой path, считаем изображением
+        // (так как в старой структуре были только photo и pdf)
+        const isImage = !isPdf && file.path && 
+                       !file.path.includes('Неверная') &&
+                       (filePath.includes('drive.google.com') || 
+                        /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName) ||
+                        /\.(jpg|jpeg|png|gif|webp)$/i.test(filePath));
 
-        if (file.pdf) {
-          fileData.pdf = file.pdf;
-        }
-
-        // Проверяем доступ к премиум-файлам
-        if (hasPremium) {
-          if (file.premium_photo) {
-            fileData.premium_photo = convertToViewLink(file.premium_photo) || file.premium_photo;
+        // Если это изображение, конвертируем Google Drive ссылку
+        if (isImage && file.path && !file.path.includes('Неверная')) {
+          const viewLink = convertToViewLink(file.path) || file.path;
+          
+          if (file.is_premium && hasPremium) {
+            fileData.premium_photo = viewLink;
+          } else if (!file.is_premium) {
+            fileData.photo = viewLink;
           }
+        }
 
-          if (file.premium_pdf) {
-            fileData.premium_pdf = file.premium_pdf;
+        // Если это PDF
+        if (isPdf && file.path && !file.path.includes('Неверная')) {
+          if (file.is_premium && hasPremium) {
+            fileData.premium_pdf = file.path;
+          } else if (!file.is_premium) {
+            fileData.pdf = file.path;
           }
         }
 
@@ -301,9 +320,9 @@ const filesController = {
       });
 
       res.json({
-        year: year.year,
-        model: model.model,
-        brand: brand.brand,
+        year: year.value,
+        model: model.name,
+        brand: brand.name,
         files: accessibleFiles,
       });
     } catch (error) {

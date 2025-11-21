@@ -73,7 +73,7 @@ async function getTelegramUserByUsername(username, botToken) {
  * Получить User ID по username или вернуть userId если это уже числовой ID
  * @param {string} input - Username (@username) или числовой ID
  * @param {string} botToken - Токен Telegram бота
- * @returns {Promise<{userId: string, username?: string, name?: string}>}
+ * @returns {Promise<{userId: string, username?: string, first_name?: string, last_name?: string}>}
  */
 async function resolveTelegramUser(input, botToken) {
   const trimmedInput = input.trim();
@@ -97,9 +97,8 @@ async function resolveTelegramUser(input, botToken) {
         return {
           userId: String(userInfo.id),
           username: userInfo.username,
-          name: userInfo.first_name || userInfo.last_name 
-            ? `${userInfo.first_name || ''} ${userInfo.last_name || ''}`.trim()
-            : undefined,
+          first_name: userInfo.first_name,
+          last_name: userInfo.last_name,
         };
       } catch (error) {
         // Если не удалось через Bot API, пробуем найти в БД
@@ -113,7 +112,8 @@ async function resolveTelegramUser(input, botToken) {
           return {
             userId: dbUser.user_id.toString(),
             username: dbUser.username,
-            name: dbUser.name,
+            first_name: dbUser.first_name,
+            last_name: dbUser.last_name,
           };
         }
 

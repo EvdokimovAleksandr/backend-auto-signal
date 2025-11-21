@@ -135,6 +135,9 @@ const adminController = {
       const brands = await prisma.brands.findMany();
       const models = await prisma.models.findMany();
       const years = await prisma.years.findMany();
+      const files = await prisma.files.findMany();
+      const fileAccessStats = await prisma.file_access_stats.findMany();
+      const admins = await prisma.admin_users.findMany();
 
       // Подсчет активных премиум-подписок
       const currentTime = new Date();
@@ -142,13 +145,74 @@ const adminController = {
         return new Date(user.sub_end) >= currentTime;
       }).length;
 
+      // Подсчет файлов по типам
+      const photosCount = files.filter(f => f.photo).length;
+      const premiumPhotosCount = files.filter(f => f.premium_photo).length;
+      const pdfsCount = files.filter(f => f.pdf).length;
+      const premiumPdfsCount = files.filter(f => f.premium_pdf).length;
+      const filesWithDescriptions = files.filter(f => f.caption).length;
+
+      // Статистика доступа к файлам
+      const totalAccessCount = fileAccessStats.length;
+      const uniqueUsersAccessed = new Set(fileAccessStats.map(s => s.user_id.toString())).size;
+
+      // Новые пользователи за последние 30 дней
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const newUsersLastMonth = users.filter(user => {
+        if (!user.created_at) return false;
+        return new Date(user.created_at) >= thirtyDaysAgo;
+      }).length;
+
+      // Новые подписки за последние 30 дней
+      const newSubscriptionsLastMonth = premiumUsers.filter(sub => {
+        if (!sub.sub_start) return false;
+        return new Date(sub.sub_start) >= thirtyDaysAgo;
+      }).length;
+
+      // Статистика по подпискам
+      const subscriptionsByPeriod = {};
+      premiumUsers.forEach(sub => {
+        const period = sub.period_months || 1;
+        subscriptionsByPeriod[period] = (subscriptionsByPeriod[period] || 0) + 1;
+      });
+
+      // Средняя продолжительность подписки
+      const activeSubscriptions = premiumUsers.filter(sub => new Date(sub.sub_end) >= currentTime);
+      const avgSubscriptionMonths = activeSubscriptions.length > 0
+        ? activeSubscriptions.reduce((sum, sub) => sum + (sub.period_months || 1), 0) / activeSubscriptions.length
+        : 0;
+
       const stats = {
+        // Основная статистика
         total_users: users.length,
         premium_users: activePremium,
         regular_users: users.length - activePremium,
         brands_count: brands.length,
         models_count: models.length,
         years_count: years.length,
+        admins_count: admins.length,
+        
+        // Статистика файлов
+        total_files: files.length,
+        photos_count: photosCount,
+        premium_photos_count: premiumPhotosCount,
+        pdfs_count: pdfsCount,
+        premium_pdfs_count: premiumPdfsCount,
+        files_with_descriptions: filesWithDescriptions,
+        
+        // Статистика доступа
+        total_file_accesses: totalAccessCount,
+        unique_users_accessed: uniqueUsersAccessed,
+        average_accesses_per_user: uniqueUsersAccessed > 0 ? (totalAccessCount / uniqueUsersAccessed).toFixed(2) : 0,
+        
+        // Временная статистика
+        new_users_last_month: newUsersLastMonth,
+        new_subscriptions_last_month: newSubscriptionsLastMonth,
+        
+        // Статистика подписок
+        subscriptions_by_period: subscriptionsByPeriod,
+        average_subscription_months: avgSubscriptionMonths.toFixed(2),
       };
 
       res.json(stats);

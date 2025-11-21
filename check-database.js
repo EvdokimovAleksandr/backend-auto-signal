@@ -20,7 +20,10 @@ async function checkDatabase() {
     if (users.length > 0) {
       console.log('   Примеры пользователей:');
       users.forEach(user => {
-        console.log(`   - ID: ${user.id}, user_id: ${user.user_id?.toString()}, username: ${user.username || 'N/A'}, name: ${user.name || 'N/A'}`);
+        const name = user.first_name || user.last_name 
+          ? `${user.first_name || ''} ${user.last_name || ''}`.trim() 
+          : 'N/A';
+        console.log(`   - user_id: ${user.user_id?.toString()}, username: ${user.username || 'N/A'}, name: ${name}`);
       });
     } else {
       console.log('   ⚠️ Таблица users пуста');
@@ -35,7 +38,7 @@ async function checkDatabase() {
     if (brands.length > 0) {
       console.log('   Примеры марок:');
       brands.forEach(brand => {
-        console.log(`   - ID: ${brand.id}, brand: ${brand.brand}`);
+        console.log(`   - ID: ${brand.id}, name: ${brand.name}`);
       });
     } else {
       console.log('   ⚠️ Таблица brands пуста');
@@ -50,7 +53,7 @@ async function checkDatabase() {
     if (models.length > 0) {
       console.log('   Примеры моделей:');
       models.forEach(model => {
-        console.log(`   - ID: ${model.id}, model: ${model.model}, brand_id: ${model.brand_id}`);
+        console.log(`   - ID: ${model.id}, name: ${model.name}, brand_id: ${model.brand_id}`);
       });
     } else {
       console.log('   ⚠️ Таблица models пуста');
@@ -65,7 +68,7 @@ async function checkDatabase() {
     if (years.length > 0) {
       console.log('   Примеры годов:');
       years.forEach(year => {
-        console.log(`   - ID: ${year.id}, year: ${year.year}, model_id: ${year.model_id}`);
+        console.log(`   - ID: ${year.id}, value: ${year.value}, model_id: ${year.model_id}`);
       });
     } else {
       console.log('   ⚠️ Таблица years пуста');
@@ -80,9 +83,8 @@ async function checkDatabase() {
     if (files.length > 0) {
       console.log('   Примеры файлов:');
       files.forEach(file => {
-        console.log(`   - ID: ${file.id}, year_id: ${file.year_id}, brand: ${file.brand}, model: ${file.model}, year: ${file.year}`);
-        console.log(`     photo: ${file.photo ? 'есть' : 'нет'}, pdf: ${file.pdf ? 'есть' : 'нет'}`);
-        console.log(`     premium_photo: ${file.premium_photo ? 'есть' : 'нет'}, premium_pdf: ${file.premium_pdf ? 'есть' : 'нет'}`);
+        console.log(`   - ID: ${file.id}, year_id: ${file.year_id}, name: ${file.name || 'N/A'}, path: ${file.path || 'N/A'}`);
+        console.log(`     is_premium: ${file.is_premium}`);
       });
     } else {
       console.log('   ⚠️ Таблица files пуста');
@@ -112,7 +114,7 @@ async function checkDatabase() {
     if (premiumUsers.length > 0) {
       console.log('   Премиум пользователи:');
       premiumUsers.forEach(premium => {
-        console.log(`   - user_id: ${premium.user_id?.toString()}, sub_start: ${premium.sub_start}, sub_end: ${premium.sub_end}, status: ${premium.status}`);
+        console.log(`   - user_id: ${premium.user_id?.toString()}, sub_end: ${premium.sub_end}, period_months: ${premium.period_months}`);
       });
     } else {
       console.log('   ⚠️ Таблица premium_users пуста');
@@ -159,5 +161,6 @@ async function checkDatabase() {
 }
 
 checkDatabase();
+
 
 

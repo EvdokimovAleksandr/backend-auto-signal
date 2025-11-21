@@ -8,40 +8,39 @@ datasource db {
 }
 
 model admin_users {
-  id             Int       @id @default(autoincrement())
-  user_id        BigInt    @unique
+  id             Int      @id @default(autoincrement())
+  user_id        BigInt   @unique
   username       String?
   added_by       BigInt?
-  added_at       DateTime? @default(now()) @db.Timestamp(6)
-  is_super_admin Boolean?  @default(false)
-}
-
-model admins {
-  id      Int    @id @default(autoincrement())
-  user_id BigInt
+  added_at       DateTime @default(now())
+  is_super_admin Boolean  @default(false)
+  users          users    @relation(fields: [user_id], references: [user_id])
 }
 
 model bot_settings {
-  id            Int       @id @default(autoincrement())
-  setting_key   String    @unique
+  id            Int      @id @default(autoincrement())
+  setting_key   String   @unique
   setting_value String
-  updated_at    DateTime? @default(now()) @db.Timestamp(6)
+  updated_at    DateTime @default(now())
 }
 
 model brands {
-  id    Int    @id @default(autoincrement())
-  brand String
+  id         Int      @id @default(autoincrement())
+  name       String   @unique
+  created_at DateTime @default(now())
+  models     models[]
 }
 
 model file_access_stats {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   user_id     BigInt
   brand       String
   model       String
   year        String
   file_id     Int?
-  accessed_at DateTime? @default(now()) @db.Timestamp(6)
-  files       files?    @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  accessed_at DateTime @default(now())
+  files       files?   @relation(fields: [file_id], references: [id], onDelete: Cascade)
+  users       users    @relation(fields: [user_id], references: [user_id])
 
   @@index([accessed_at], map: "idx_file_access_stats_accessed_at")
   @@index([brand, model], map: "idx_file_access_stats_brand_model")
@@ -49,66 +48,71 @@ model file_access_stats {
 
 model files {
   id                Int                 @id @default(autoincrement())
-  photo             String?
-  pdf               String?
-  premium_photo     String?
-  premium_pdf       String?
-  year_id           Int?
-  year              String?
-  model             String?
-  brand             String?
-  caption           String?
+  name              String
+  path              String
+  is_premium        Boolean             @default(false)
+  year_id           Int
+  created_at        DateTime            @default(now())
+  descriptions      descriptions[]
   file_access_stats file_access_stats[]
+  years             years               @relation(fields: [year_id], references: [id])
 }
 
 model models {
-  id       Int     @id @default(autoincrement())
-  model    String
-  brand_id Int?
-  brand    String?
-}
+  id         Int      @id @default(autoincrement())
+  name       String
+  brand_id   Int
+  created_at DateTime @default(now())
+  brands     brands   @relation(fields: [brand_id], references: [id])
+  years      years[]
 
-model owner {
-  user_id           BigInt @id
-  price_for_premium Int    @default(300)
-}
-
-model password {
-  password String @id
+  @@unique([brand_id, name])
 }
 
 model premium_users {
-  id            BigInt @id @default(autoincrement())
-  user_id       BigInt
-  sub_start     String
-  sub_end       String
-  status        String
-  period_months Int?   @default(1)
+  id            Int      @id @default(autoincrement())
+  user_id       BigInt   @unique
+  sub_end       DateTime
+  period_months Int      @default(1)
+  users         users    @relation(fields: [user_id], references: [user_id])
 
   @@index([sub_end], map: "idx_premium_users_sub_end")
 }
 
 model subscription_prices {
-  id            Int       @id @default(autoincrement())
-  period_months Int       @unique
+  id            Int      @id @default(autoincrement())
+  period_months Int      @unique
   price_kopecks Int
-  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  created_at    DateTime @default(now())
 }
 
 model users {
-  id         Int       @id @default(autoincrement())
-  user_id    BigInt?   @unique
-  username   String?
-  name       String?
-  created_at DateTime? @default(now()) @db.Timestamp(6)
-  stage      Int       @default(0)
-  page       Int       @default(0)
+  user_id           BigInt              @id @default(autoincrement())
+  username          String?
+  first_name        String?
+  last_name         String?
+  created_at        DateTime            @default(now())
+  admin_users       admin_users?
+  file_access_stats file_access_stats[]
+  premium_users     premium_users?
 }
 
 model years {
-  id       Int     @id @default(autoincrement())
-  year     String
-  model_id Int?
-  brand    String?
-  model    String?
+  id         Int      @id @default(autoincrement())
+  value      String
+  model_id   Int
+  created_at DateTime @default(now())
+  files      files[]
+  models     models   @relation(fields: [model_id], references: [id])
+
+  @@unique([model_id, value])
+}
+
+model descriptions {
+  id         Int      @id @default(autoincrement())
+  content    String
+  file_id    Int
+  created_at DateTime @default(now())
+  updated_at DateTime
+  files      files    @relation(fields: [file_id], references: [id])
 }
