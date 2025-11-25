@@ -10,15 +10,18 @@ const filesController = {
 
       const [brands, total] = await Promise.all([
         prisma.brands.findMany({
-          orderBy: { name: "asc" },
+          orderBy: { brand: "asc" },
           skip: skip,
           take: parseInt(limit),
         }),
         prisma.brands.count(),
       ]);
+      
+      // Преобразуем для совместимости с фронтендом
+      const brandsWithName = brands.map(b => ({ ...b, name: b.brand }));
 
       res.json({
-        brands,
+        brands: brandsWithName,
         pagination: {
           currentPage: parseInt(page),
           totalPages: Math.ceil(total / limit),
@@ -39,10 +42,12 @@ const filesController = {
 
       const models = await prisma.models.findMany({
         where: { brand_id: parseInt(brandId) },
-        orderBy: { name: "asc" },
+        orderBy: { model: "asc" },
       });
 
-      res.json(models);
+      // Преобразуем для совместимости с фронтендом
+      const modelsWithName = models.map(m => ({ ...m, name: m.model }));
+      res.json(modelsWithName);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -55,10 +60,12 @@ const filesController = {
 
       const years = await prisma.years.findMany({
         where: { model_id: parseInt(modelId) },
-        orderBy: { value: "asc" },
+        orderBy: { year: "asc" },
       });
 
-      res.json(years);
+      // Преобразуем для совместимости с фронтендом
+      const yearsWithValue = years.map(y => ({ ...y, value: y.year }));
+      res.json(yearsWithValue);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -187,9 +194,9 @@ const filesController = {
           data: {
             year_id: parseInt(yearId),
             photo: downloadUrl,
-            year: year.value,
-            model: model.name,
-            brand: brand.name,
+            year: year.year,
+            model: model.model,
+            brand: brand.brand,
           },
         });
       }
@@ -200,9 +207,9 @@ const filesController = {
           await prisma.file_access_stats.create({
             data: {
               user_id: BigInt(req.user.user_id),
-          brand: brand.name,
-          model: model.name,
-          year: year.value,
+              brand: brand.brand,
+              model: model.model,
+              year: year.year,
               file_id: file.id,
             },
           });
@@ -268,51 +275,44 @@ const filesController = {
         where: { year_id: parseInt(yearId) },
       });
 
-      // Фильтруем файлы в зависимости от прав доступа
+      // Формируем доступные файлы на основе структуры БД
+      // В БД есть прямые поля: photo, pdf, premium_photo, premium_pdf
       const accessibleFiles = files.map((file) => {
         const fileData = {
           id: file.id,
           year_id: file.year_id,
-          name: file.name || null,
-          path: file.path || null,
-          is_premium: file.is_premium || false,
+          caption: file.caption || null,
         };
 
-        // Определяем тип файла
-        // Для Google Drive ссылок проверяем name, так как path не содержит расширения
-        const fileName = (file.name || '').toLowerCase();
-        const filePath = (file.path || '').toLowerCase();
-        
-        // Проверяем, является ли файл PDF
-        const isPdf = fileName.includes('pdf') || 
-                     filePath.includes('.pdf') ||
-                     filePath.includes('pdf');
-        
-        // Если не PDF и не пустой path, считаем изображением
-        // (так как в старой структуре были только photo и pdf)
-        const isImage = !isPdf && file.path && 
-                       !file.path.includes('Неверная') &&
-                       (filePath.includes('drive.google.com') || 
-                        /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName) ||
-                        /\.(jpg|jpeg|png|gif|webp)$/i.test(filePath));
+        // Обычное фото - доступно всем
+        if (file.photo) {
+          const viewLink = convertToViewLink(file.photo) || file.photo;
+          fileData.photo = viewLink;
+        }
 
-        // Если это изображение, конвертируем Google Drive ссылку
-        if (isImage && file.path && !file.path.includes('Неверная')) {
-          const viewLink = convertToViewLink(file.path) || file.path;
-          
-          if (file.is_premium && hasPremium) {
+        // Обычный PDF - доступен всем
+        if (file.pdf) {
+          fileData.pdf = file.pdf;
+        }
+
+        // Премиум фото - только для премиум пользователей
+        if (file.premium_photo) {
+          if (hasPremium) {
+            const viewLink = convertToViewLink(file.premium_photo) || file.premium_photo;
             fileData.premium_photo = viewLink;
-          } else if (!file.is_premium) {
-            fileData.photo = viewLink;
+          } else {
+            // Показываем что есть премиум контент, но не даём ссылку
+            fileData.has_premium_photo = true;
           }
         }
 
-        // Если это PDF
-        if (isPdf && file.path && !file.path.includes('Неверная')) {
-          if (file.is_premium && hasPremium) {
-            fileData.premium_pdf = file.path;
-          } else if (!file.is_premium) {
-            fileData.pdf = file.path;
+        // Премиум PDF - только для премиум пользователей
+        if (file.premium_pdf) {
+          if (hasPremium) {
+            fileData.premium_pdf = file.premium_pdf;
+          } else {
+            // Показываем что есть премиум контент, но не даём ссылку
+            fileData.has_premium_pdf = true;
           }
         }
 
@@ -320,9 +320,9 @@ const filesController = {
       });
 
       res.json({
-        year: year.value,
-        model: model.name,
-        brand: brand.name,
+        year: year.year,
+        model: model.model,
+        brand: brand.brand,
         files: accessibleFiles,
       });
     } catch (error) {
