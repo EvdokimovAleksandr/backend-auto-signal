@@ -109,11 +109,13 @@ async function resolveTelegramUser(input, botToken) {
         });
 
         if (dbUser) {
+          // Разбиваем name на first_name и last_name для совместимости
+          const nameParts = (dbUser.name || '').split(' ');
           return {
             userId: dbUser.user_id.toString(),
             username: dbUser.username,
-            first_name: dbUser.first_name,
-            last_name: dbUser.last_name,
+            first_name: nameParts[0] || null,
+            last_name: nameParts.slice(1).join(' ') || null,
           };
         }
 

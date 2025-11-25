@@ -10,7 +10,8 @@
     "test-backend": "node test-backend.js",
     "check-db": "node check-database.js",
     "restore-db-node": "node restore-database-node.js",
-    "sync-prisma": "node sync-prisma.js"
+    "sync-prisma": "node sync-prisma.js",
+    "setup-db": "node setup-database.js"
   },
   "keywords": [],
   "author": "",

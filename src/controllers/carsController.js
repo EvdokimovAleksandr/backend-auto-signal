@@ -5,9 +5,11 @@ const carsController = {
   getBrands: async (req, res) => {
     try {
       const brands = await prisma.brands.findMany({
-        orderBy: { name: "asc" },
+        orderBy: { brand: "asc" },
       });
-      res.json(brands);
+      // Преобразуем для совместимости с фронтендом (brand -> name)
+      const result = brands.map(b => ({ ...b, name: b.brand }));
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -67,9 +69,11 @@ const carsController = {
       const { brandId } = req.query;
       const models = await prisma.models.findMany({
         where: { brand_id: parseInt(brandId) },
-        orderBy: { name: "asc" },
+        orderBy: { model: "asc" },
       });
-      res.json(models);
+      // Преобразуем для совместимости с фронтендом (model -> name)
+      const result = models.map(m => ({ ...m, name: m.model }));
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -81,9 +85,11 @@ const carsController = {
       const { modelId } = req.query;
       const years = await prisma.years.findMany({
         where: { model_id: parseInt(modelId) },
-        orderBy: { value: "asc" },
+        orderBy: { year: "asc" },
       });
-      res.json(years);
+      // Преобразуем для совместимости с фронтендом (year -> value)
+      const result = years.map(y => ({ ...y, value: y.year }));
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -94,14 +100,20 @@ const carsController = {
     try {
       const { model, brandId } = req.body;
 
+      // Получаем название марки для денормализации
+      const brand = await prisma.brands.findUnique({
+        where: { id: parseInt(brandId) },
+      });
+
       const newModel = await prisma.models.create({
         data: {
-          name: model,
+          model: model,
           brand_id: parseInt(brandId),
+          brand: brand?.brand || null,
         },
       });
 
-      res.json(newModel);
+      res.json({ ...newModel, name: newModel.model });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -119,7 +131,7 @@ const carsController = {
       for (const brandName of brands) {
         // Проверяем, существует ли уже марка
         const existingBrand = await prisma.brands.findFirst({
-          where: { name: brandName },
+          where: { brand: brandName },
         });
 
         if (existingBrand) {
@@ -131,7 +143,7 @@ const carsController = {
         } else {
           // Добавляем новую марку
           const newBrand = await prisma.brands.create({
-            data: { name: brandName },
+            data: { brand: brandName },
           });
           results.push({
             brand: brandName,
@@ -161,7 +173,7 @@ const carsController = {
       for (const brandName of brands) {
         // Находим марку
         const brand = await prisma.brands.findFirst({
-          where: { name: brandName },
+          where: { brand: brandName },
         });
 
         if (!brand) {
@@ -178,23 +190,8 @@ const carsController = {
           where: { brand_id: brand.id },
         });
 
-        // Находим все годы для этих моделей
-        const modelIds = models.map((m) => m.id);
-        const years = await prisma.years.findMany({
-          where: { model_id: { in: modelIds } },
-        });
-
-        if (!brand) {
-          results.push({
-            brand: brandName,
-            status: "not_found",
-            message: "Марка не найдена",
-          });
-          continue;
-        }
-
         // Удаляем все связанные годы
-        for (const model of brand.models) {
+        for (const model of models) {
           await prisma.years.deleteMany({
             where: { model_id: model.id },
           });
@@ -226,7 +223,7 @@ const carsController = {
 
       // Проверяем, существует ли новая марка
       const existingBrand = await prisma.brands.findFirst({
-        where: { name: newBrand },
+        where: { brand: newBrand },
       });
 
       if (existingBrand) {
@@ -236,20 +233,20 @@ const carsController = {
       }
 
       // Находим и обновляем марку
-      const brand = await prisma.brands.findFirst({
-        where: { name: oldBrand },
+      const brandRecord = await prisma.brands.findFirst({
+        where: { brand: oldBrand },
       });
 
-      if (!brand) {
+      if (!brandRecord) {
         return res.status(404).json({ error: "Марка не найдена" });
       }
 
       const updatedBrand = await prisma.brands.update({
-        where: { id: brand.id },
-        data: { name: newBrand },
+        where: { id: brandRecord.id },
+        data: { brand: newBrand },
       });
 
-      res.json(updatedBrand);
+      res.json({ ...updatedBrand, name: updatedBrand.brand });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -268,14 +265,16 @@ const carsController = {
 
       const brands = await prisma.brands.findMany({
         where: {
-          name: {
+          brand: {
             contains: name,
             mode: "insensitive",
           },
         },
       });
 
-      res.json(brands);
+      // Преобразуем для совместимости с фронтендом
+      const result = brands.map(b => ({ ...b, name: b.brand }));
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -294,13 +293,18 @@ const carsController = {
         return res.status(400).json({ error: "Необходим ID марки" });
       }
 
+      // Получаем название марки для денормализации
+      const brand = await prisma.brands.findUnique({
+        where: { id: parseInt(brandId) },
+      });
+
       const results = [];
 
       for (const modelName of models) {
         // Проверяем, существует ли уже модель для этой марки
         const existingModel = await prisma.models.findFirst({
           where: {
-            name: modelName,
+            model: modelName,
             brand_id: parseInt(brandId),
           },
         });
@@ -315,8 +319,9 @@ const carsController = {
           // Добавляем новую модель
           const newModel = await prisma.models.create({
             data: {
-              name: modelName,
+              model: modelName,
               brand_id: parseInt(brandId),
+              brand: brand?.brand || null,
             },
           });
           results.push({
@@ -350,17 +355,14 @@ const carsController = {
 
       for (const modelName of models) {
         // Находим модель
-        const model = await prisma.models.findFirst({
+        const modelRecord = await prisma.models.findFirst({
           where: {
-            name: modelName,
+            model: modelName,
             brand_id: parseInt(brandId),
-          },
-          include: {
-            years: true,
           },
         });
 
-        if (!model) {
+        if (!modelRecord) {
           results.push({
             model: modelName,
             status: "not_found",
@@ -371,12 +373,12 @@ const carsController = {
 
         // Удаляем все связанные годы
         await prisma.years.deleteMany({
-          where: { model_id: model.id },
+          where: { model_id: modelRecord.id },
         });
 
         // Удаляем саму модель
         await prisma.models.delete({
-          where: { id: model.id },
+          where: { id: modelRecord.id },
         });
 
         results.push({ model: modelName, status: "deleted" });
@@ -400,7 +402,7 @@ const carsController = {
       // Проверяем, существует ли новая модель для этой марки
       const existingModel = await prisma.models.findFirst({
         where: {
-          name: newModel,
+          model: newModel,
           brand_id: parseInt(brandId),
         },
       });
@@ -412,23 +414,23 @@ const carsController = {
       }
 
       // Находим и обновляем модель
-      const model = await prisma.models.findFirst({
+      const modelRecord = await prisma.models.findFirst({
         where: {
-          name: oldModel,
+          model: oldModel,
           brand_id: parseInt(brandId),
         },
       });
 
-      if (!model) {
+      if (!modelRecord) {
         return res.status(404).json({ error: "Модель не найдена" });
       }
 
       const updatedModel = await prisma.models.update({
-        where: { id: model.id },
-        data: { name: newModel },
+        where: { id: modelRecord.id },
+        data: { model: newModel },
       });
 
-      res.json(updatedModel);
+      res.json({ ...updatedModel, name: updatedModel.model });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -446,7 +448,7 @@ const carsController = {
       }
 
       const whereCondition = {
-        name: {
+        model: {
           contains: name,
           mode: "insensitive",
         },
@@ -460,20 +462,9 @@ const carsController = {
         where: whereCondition,
       });
 
-      // Добавляем информацию о марке для каждой модели
-      const modelsWithBrand = await Promise.all(
-        models.map(async (model) => {
-          if (model.brand_id) {
-            const brand = await prisma.brands.findUnique({
-              where: { id: model.brand_id },
-            });
-            return { ...model, brand: brand ? { name: brand.name } : null };
-          }
-          return model;
-        })
-      );
-
-      res.json(models);
+      // Преобразуем для совместимости с фронтендом
+      const result = models.map(m => ({ ...m, name: m.model }));
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -491,20 +482,12 @@ const carsController = {
         return res.status(400).json({ error: "Необходим ID модели" });
       }
 
-      // Получаем информацию о модели и марке для связи
-      const model = await prisma.models.findUnique({
+      // Получаем информацию о модели и марке для денормализации
+      const modelRecord = await prisma.models.findUnique({
         where: { id: parseInt(modelId) },
       });
 
-      if (!model || !model.brand_id) {
-        return res.status(404).json({ error: "Модель не найдена или не привязана к марке" });
-      }
-
-      const brand = await prisma.brands.findUnique({
-        where: { id: model.brand_id },
-      });
-
-      if (!model) {
+      if (!modelRecord) {
         return res.status(404).json({ error: "Модель не найдена" });
       }
 
@@ -514,7 +497,7 @@ const carsController = {
         // Проверяем, существует ли уже год для этой модели
         const existingYear = await prisma.years.findFirst({
           where: {
-            value: yearValue,
+            year: yearValue,
             model_id: parseInt(modelId),
           },
         });
@@ -526,11 +509,13 @@ const carsController = {
             message: "Год уже существует",
           });
         } else {
-          // Добавляем новый год
+          // Добавляем новый год с денормализованными данными
           const newYear = await prisma.years.create({
             data: {
-              value: yearValue,
+              year: yearValue,
               model_id: parseInt(modelId),
+              model: modelRecord.model,
+              brand: modelRecord.brand,
             },
           });
           results.push({ year: yearValue, status: "created", id: newYear.id });
@@ -560,19 +545,14 @@ const carsController = {
 
       for (const yearValue of years) {
         // Находим год
-        const year = await prisma.years.findFirst({
+        const yearRecord = await prisma.years.findFirst({
           where: {
-            value: yearValue,
+            year: yearValue,
             model_id: parseInt(modelId),
           },
         });
 
-        // Проверяем наличие файлов для этого года
-        const files = await prisma.files.findMany({
-          where: { year_id: year?.id },
-        });
-
-        if (!year) {
+        if (!yearRecord) {
           results.push({
             year: yearValue,
             status: "not_found",
@@ -583,12 +563,12 @@ const carsController = {
 
         // Удаляем все связанные файлы
         await prisma.files.deleteMany({
-          where: { year_id: year.id },
+          where: { year_id: yearRecord.id },
         });
 
         // Удаляем сам год
         await prisma.years.delete({
-          where: { id: year.id },
+          where: { id: yearRecord.id },
         });
 
         results.push({ year: yearValue, status: "deleted" });
@@ -612,7 +592,7 @@ const carsController = {
       // Проверяем, существует ли новый год для этой модели
       const existingYear = await prisma.years.findFirst({
         where: {
-          value: newYear,
+          year: newYear,
           model_id: parseInt(modelId),
         },
       });
@@ -624,23 +604,23 @@ const carsController = {
       }
 
       // Находим и обновляем год
-      const year = await prisma.years.findFirst({
+      const yearRecord = await prisma.years.findFirst({
         where: {
-          value: oldYear,
+          year: oldYear,
           model_id: parseInt(modelId),
         },
       });
 
-      if (!year) {
+      if (!yearRecord) {
         return res.status(404).json({ error: "Год не найден" });
       }
 
       const updatedYear = await prisma.years.update({
-        where: { id: year.id },
-        data: { value: newYear },
+        where: { id: yearRecord.id },
+        data: { year: newYear },
       });
 
-      res.json(updatedYear);
+      res.json({ ...updatedYear, value: updatedYear.year });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -656,7 +636,7 @@ const carsController = {
       }
 
       const whereCondition = {
-        value: {
+        year: {
           contains: year,
           mode: "insensitive",
         },
@@ -670,34 +650,9 @@ const carsController = {
         where: whereCondition,
       });
 
-      // Добавляем информацию о модели и марке для каждого года
-      const yearsWithDetails = await Promise.all(
-        years.map(async (year) => {
-          let modelInfo = null;
-          let brandInfo = null;
-
-          if (year.model_id) {
-            const model = await prisma.models.findUnique({
-              where: { id: year.model_id },
-            });
-            if (model) {
-              modelInfo = model;
-              if (model.brand_id) {
-                brandInfo = await prisma.brands.findUnique({
-                  where: { id: model.brand_id },
-                });
-              }
-            }
-          }
-
-          return {
-            ...year,
-            model: modelInfo ? { ...modelInfo, brand: brandInfo } : null,
-          };
-        })
-      );
-
-      res.json(yearsWithDetails || years);
+      // Преобразуем для совместимости с фронтендом
+      const result = years.map(y => ({ ...y, value: y.year }));
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

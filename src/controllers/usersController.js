@@ -11,7 +11,7 @@ const usersController = {
       // Поддерживаем два формата:
       // 1. { userId: "123456789" } - прямой User ID
       // 2. { telegramInput: "@username" или "123456789" } - username или User ID
-      const { userId, username, first_name, last_name, telegramInput } = req.body;
+      const { userId, username, first_name, last_name, name, telegramInput } = req.body;
 
       // Валидация входных данных
       if (telegramInput) {
@@ -30,12 +30,10 @@ const usersController = {
         });
       }
 
-      // Валидация опциональных полей (убрана, так как name больше не используется)
-
       let resolvedUserId = userId;
       let resolvedUsername = username;
-      let resolvedFirstName = first_name;
-      let resolvedLastName = last_name;
+      // Объединяем first_name и last_name в name (для совместимости с Telegram API)
+      let resolvedName = name || (first_name || last_name ? `${first_name || ''} ${last_name || ''}`.trim() : null);
 
       // Если передан telegramInput (username или @username), пытаемся получить User ID
       if (telegramInput && !userId) {
@@ -44,8 +42,10 @@ const usersController = {
           const resolved = await resolveTelegramUser(telegramInput, botToken);
           resolvedUserId = resolved.userId;
           resolvedUsername = resolved.username || resolvedUsername;
-          resolvedFirstName = resolved.first_name;
-          resolvedLastName = resolved.last_name;
+          // Объединяем first_name и last_name из Telegram API
+          if (resolved.first_name || resolved.last_name) {
+            resolvedName = `${resolved.first_name || ''} ${resolved.last_name || ''}`.trim();
+          }
         } catch (error) {
           // Если не удалось получить через Bot API, пробуем найти в БД
           if (telegramInput.startsWith('@') || /^[a-zA-Z0-9_]+$/.test(telegramInput)) {
@@ -59,8 +59,7 @@ const usersController = {
             if (dbUser) {
               resolvedUserId = dbUser.user_id.toString();
               resolvedUsername = dbUser.username;
-              resolvedFirstName = dbUser.first_name;
-              resolvedLastName = dbUser.last_name;
+              resolvedName = dbUser.name;
             } else {
               // Если не нашли в БД и нет Bot Token - возвращаем понятную ошибку
               if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -93,14 +92,12 @@ const usersController = {
         where: { user_id: BigInt(resolvedUserId) },
         update: {
           username: resolvedUsername !== undefined ? resolvedUsername : undefined,
-          first_name: resolvedFirstName !== undefined ? resolvedFirstName : undefined,
-          last_name: resolvedLastName !== undefined ? resolvedLastName : undefined,
+          name: resolvedName !== undefined ? resolvedName : undefined,
         },
         create: {
           user_id: BigInt(resolvedUserId),
           username: resolvedUsername || null,
-          first_name: resolvedFirstName || null,
-          last_name: resolvedLastName || null,
+          name: resolvedName || null,
         },
       });
 
@@ -127,11 +124,15 @@ const usersController = {
         isPremium = currentTime <= subEnd;
       }
 
+      // Разбиваем name на first_name и last_name для совместимости с API
+      const nameParts = (user.name || '').split(' ');
       res.json({
         token,
         user: {
           ...user,
           user_id: user.user_id.toString(),
+          first_name: nameParts[0] || null,
+          last_name: nameParts.slice(1).join(' ') || null,
         },
         isAdmin,
         isPremium,
@@ -144,7 +145,7 @@ const usersController = {
   // Регистрация пользователя
   registerUser: async (req, res) => {
     try {
-      const { userId, username, first_name, last_name } = req.body;
+      const { userId, username, first_name, last_name, name } = req.body;
 
       // Валидация входных данных
       if (!userId) {
@@ -156,23 +157,31 @@ const usersController = {
         return res.status(400).json({ error: userIdValidation.error });
       }
 
+      // Объединяем first_name и last_name в name (для совместимости)
+      const resolvedName = name || (first_name || last_name ? `${first_name || ''} ${last_name || ''}`.trim() : null);
+
       // Используем upsert для создания или обновления пользователя
       const user = await prisma.users.upsert({
         where: { user_id: BigInt(userId) },
         update: {
           username: username !== undefined ? username : undefined,
-          first_name: first_name !== undefined ? first_name : undefined,
-          last_name: last_name !== undefined ? last_name : undefined,
+          name: resolvedName !== undefined ? resolvedName : undefined,
         },
         create: {
           user_id: BigInt(userId),
           username: username || null,
-          first_name: first_name || null,
-          last_name: last_name || null,
+          name: resolvedName || null,
         },
       });
 
-      res.json(user);
+      // Добавляем first_name и last_name для совместимости с API
+      const nameParts = (user.name || '').split(' ');
+      res.json({
+        ...user,
+        user_id: user.user_id.toString(),
+        first_name: nameParts[0] || null,
+        last_name: nameParts.slice(1).join(' ') || null,
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -191,7 +200,14 @@ const usersController = {
         return res.status(404).json({ error: "Пользователь не найден" });
       }
 
-      res.json(user);
+      // Разбиваем name на first_name и last_name для совместимости с API
+      const nameParts = (user.name || '').split(' ');
+      res.json({
+        ...user,
+        user_id: user.user_id.toString(),
+        first_name: nameParts[0] || null,
+        last_name: nameParts.slice(1).join(' ') || null,
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -201,18 +217,29 @@ const usersController = {
   updateUser: async (req, res) => {
     try {
       const { userId } = req.params;
-      const { username, first_name, last_name } = req.body;
+      const { username, first_name, last_name, name } = req.body;
+
+      // Объединяем first_name и last_name в name (для совместимости)
+      const resolvedName = name !== undefined ? name : 
+        (first_name !== undefined || last_name !== undefined ? 
+          `${first_name || ''} ${last_name || ''}`.trim() : undefined);
 
       const user = await prisma.users.update({
         where: { user_id: BigInt(userId) },
         data: {
           ...(username !== undefined && { username }),
-          ...(first_name !== undefined && { first_name }),
-          ...(last_name !== undefined && { last_name }),
+          ...(resolvedName !== undefined && { name: resolvedName }),
         },
       });
 
-      res.json(user);
+      // Добавляем first_name и last_name для совместимости с API
+      const nameParts = (user.name || '').split(' ');
+      res.json({
+        ...user,
+        user_id: user.user_id.toString(),
+        first_name: nameParts[0] || null,
+        last_name: nameParts.slice(1).join(' ') || null,
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -233,8 +260,19 @@ const usersController = {
         prisma.users.count(),
       ]);
 
+      // Преобразуем users для совместимости с API (добавляем first_name/last_name)
+      const usersWithNames = users.map(user => {
+        const nameParts = (user.name || '').split(' ');
+        return {
+          ...user,
+          user_id: user.user_id?.toString(),
+          first_name: nameParts[0] || null,
+          last_name: nameParts.slice(1).join(' ') || null,
+        };
+      });
+
       res.json({
-        users,
+        users: usersWithNames,
         pagination: {
           currentPage: parseInt(page),
           totalPages: Math.ceil(total / parseInt(limit)),
@@ -268,10 +306,14 @@ const usersController = {
         isPremium = currentTime <= subEnd;
       }
 
+      // Разбиваем name на first_name и last_name для совместимости с API
+      const nameParts = (user.name || '').split(' ');
       res.json({
         user: {
           ...user,
           user_id: user.user_id.toString(),
+          first_name: nameParts[0] || null,
+          last_name: nameParts.slice(1).join(' ') || null,
         },
         isAdmin,
         isPremium,
